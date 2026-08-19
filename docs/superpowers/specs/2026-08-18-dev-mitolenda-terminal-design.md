@@ -25,7 +25,7 @@ A comunicação será direta, técnica e autoral, usando a linguagem visual do s
 ### Dependências
 
 - Starship como mecanismo de prompt compartilhado;
-- Space Mono Nerd Font como fonte recomendada;
+- Space Mono Nerd Font como fonte recomendada; instalação automática somente no macOS, e manual no Windows por não haver um ID de pacote WinGet estável adotado pelo projeto;
 - Homebrew no macOS;
 - winget no Windows, quando disponível.
 
@@ -87,10 +87,10 @@ O `install.sh` será idempotente e executará estas etapas:
 1. validar macOS e disponibilidade do Zsh;
 2. verificar Homebrew, apresentando instrução clara caso não exista;
 3. instalar Starship e Space Mono Nerd Font somente quando ausentes;
-4. criar um backup datado das configurações que serão alteradas;
-5. copiar os arquivos do projeto para `~/.config/dev-mitolenda-terminal/`;
-6. gerenciar um bloco delimitado no `.zshrc`, sem duplicar linhas;
-7. validar a configuração do Starship;
+4. validar a configuração do Starship antes de alterar o perfil ou a configuração gerenciada;
+5. criar um backup datado das configurações que serão alteradas;
+6. copiar os arquivos do projeto para `~/.config/dev-mitolenda-terminal/`;
+7. gerenciar um bloco delimitado no `.zshrc`, sem duplicar linhas e sem substituir um link simbólico válido;
 8. informar como selecionar a fonte no terminal e ativar a sessão.
 
 O instalador não substituirá silenciosamente configurações completas do usuário. Apenas o bloco identificado como gerenciado pelo projeto poderá ser atualizado automaticamente.
@@ -99,16 +99,16 @@ O instalador não substituirá silenciosamente configurações completas do usu�
 
 O `install.ps1` será idempotente e executará estas etapas:
 
-1. validar PowerShell e detectar Windows Terminal quando possível;
+1. validar PowerShell e detectar Windows Terminal quando possível, sem abrir nem alterar seu JSON;
 2. verificar `winget` e oferecer instruções manuais quando indisponível;
-3. instalar Starship e Space Mono Nerd Font somente quando ausentes;
+3. instalar Starship quando ausente; a instalação da Space Mono Nerd Font permanece manual;
 4. criar backup datado do perfil do PowerShell e das configurações gerenciadas;
-5. copiar os arquivos para um diretório de configuração dentro do perfil do usuário;
-6. gerenciar um bloco delimitado no `$PROFILE`, sem duplicação;
-7. validar o carregamento do Starship e das funções `mt`;
+5. validar o Starship e validar `Get-Command mt` e `mt version` em um processo PowerShell isolado usando uma cópia temporária do helper, tudo antes de alterar os arquivos finais;
+6. copiar os arquivos validados para um diretório de configuração dentro do perfil do usuário;
+7. gerenciar um bloco delimitado no `$PROFILE`, sem duplicação;
 8. orientar a seleção da fonte no Windows Terminal.
 
-O instalador não editará automaticamente o JSON completo do Windows Terminal na versão 1.0. A fonte será aplicada pelo usuário com instruções ilustradas, reduzindo o risco de danificar perfis existentes.
+Decisão formal da versão 1.0: o instalador detecta o Windows Terminal apenas para informar o estado, mas não lê nem edita seu JSON. A instalação e a seleção da fonte no Windows são manuais porque o projeto não adotou um ID estável de pacote WinGet para a Space Mono Nerd Font. Essas duas decisões reduzem o risco de executar um pacote ambíguo ou danificar perfis existentes.
 
 ## 07 // Identidade visual
 
@@ -141,7 +141,7 @@ Os scripts não enviarão telemetria nem realizarão chamadas externas além dos
 
 ## 09 // Recuperação e erros
 
-Os instaladores usarão modo estrito, mensagens legíveis e códigos de saída diferentes de zero em falhas. Se uma validação falhar depois de alterar um arquivo, o script informará a localização do backup e o comando de restauração.
+Os instaladores usarão modo estrito, mensagens legíveis e códigos de saída diferentes de zero em falhas. As validações do Starship e do helper PowerShell devem acontecer antes de alterar o perfil ou a configuração gerenciada. Se uma futura validação precisar ocorrer depois de uma alteração, a falha deverá informar a localização exata do backup e um comando de restauração completo.
 
 Os desinstaladores removerão apenas blocos e arquivos reconhecidos como pertencentes ao projeto. Dependências compartilhadas, como Starship e a fonte, não serão removidas automaticamente.
 

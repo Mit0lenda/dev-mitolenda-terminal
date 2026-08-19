@@ -81,7 +81,9 @@ O instalador:
 
 // adiciona um bloco delimitado ao `~/.zshrc`;
 
-// valida o prompt com o Starship quando o comando está disponível.
+// preserva um `~/.zshrc` que seja link simbólico válido, editando seu arquivo-alvo;
+
+// valida o prompt com o Starship antes de alterar o perfil ou a configuração gerenciada.
 
 Se o Homebrew ainda não estiver instalado, o script para e aponta para [brew.sh](https://brew.sh/).
 
@@ -103,9 +105,9 @@ Get-Content .\install.ps1
 
 Quando o WinGet está disponível, o script instala o Starship pelo pacote `Starship.Starship` se ele estiver ausente. Sem WinGet, o script avisa que as dependências precisam ser instaladas manualmente e continua com a integração protegida por detecção do comando.
 
-A **Space Mono Nerd Font é manual no Windows porque nenhum ID estável de pacote no WinGet foi usado como dependência deste projeto**. Baixe a fonte em [Nerd Fonts](https://www.nerdfonts.com/font-downloads), instale-a e escolha **SpaceMono Nerd Font** em **Windows Terminal > Settings > Defaults > Appearance**.
+A **Space Mono Nerd Font é manual no Windows porque nenhum ID estável de pacote no WinGet foi adotado pelo projeto**. Baixe a fonte em [Nerd Fonts](https://www.nerdfonts.com/font-downloads), instale-a e escolha **SpaceMono Nerd Font** em **Windows Terminal > Settings > Defaults > Appearance**.
 
-O instalador não edita o `settings.json` do Windows Terminal. Ele:
+Decisão da versão 1.0: o instalador detecta o Windows Terminal e informa o resultado, mas não lê nem edita seu `settings.json`. Ele:
 
 // salva backups em `$HOME/.config/dev-mitolenda-terminal-backups/<DATA>/`;
 
@@ -113,7 +115,11 @@ O instalador não edita o `settings.json` do Windows Terminal. Ele:
 
 // adiciona um bloco delimitado ao arquivo indicado por `$PROFILE`;
 
-// preserva a codificação e o BOM de perfis existentes.
+// preserva a codificação e o BOM de perfis existentes;
+
+// valida o Starship antes das mutações;
+
+// valida `Get-Command mt` e `mt version` em outro processo PowerShell usando uma cópia temporária do helper antes de instalar os arquivos finais.
 
 ## 05 // COMANDOS `mt`
 
@@ -166,7 +172,7 @@ Antes de executar:
 
 // mantenha os backups até confirmar que a nova sessão funciona.
 
-No macOS, o desinstalador remove a pasta gerenciada inteira quando reconhece a assinatura do `starship.toml`. No Windows, ele remove individualmente apenas os dois arquivos com as assinaturas esperadas. Em qualquer plataforma, trate o diretório do projeto como gerenciado e não como armazenamento pessoal.
+No macOS, o desinstalador compara `starship.toml` e `mitolenda.zsh` individualmente com os arquivos do clone em execução. Ele apaga apenas cópias inalteradas e remove a pasta somente se ela ficar vazia; arquivos modificados ou desconhecidos são preservados. No Windows, ele remove individualmente apenas os dois arquivos com as assinaturas esperadas. Mesmo com essas proteções, trate o diretório do projeto como gerenciado e não como armazenamento pessoal.
 
 Leia o inventário completo em [docs/SEGURANCA.md](docs/SEGURANCA.md).
 
@@ -198,7 +204,7 @@ Para recuperar manualmente uma versão anterior, localize o backup desejado em `
 
 // O projeto personaliza o prompt; ele não troca automaticamente a paleta completa do aplicativo de terminal.
 
-// A seleção da Space Mono Nerd Font é manual nos aplicativos de terminal. No Windows, a instalação da fonte também é manual porque nenhum ID estável de pacote no WinGet foi adotado.
+// A seleção da Space Mono Nerd Font é manual nos aplicativos de terminal. No Windows, a instalação da fonte também é manual porque nenhum ID estável de pacote no WinGet foi adotado; o instalador apenas detecta o Windows Terminal e mantém o JSON intocado.
 
 // Os arquivos PowerShell receberam **validação estática no macOS**, mas **não foram testados em execução neste host sob Windows PowerShell 5.1 nem PowerShell 7**. Antes de uma release, execute `tests/Test-InstallWindows.ps1` nas duas versões em um host Windows.
 

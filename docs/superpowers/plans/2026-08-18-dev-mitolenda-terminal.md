@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Suporte oficial inicial: macOS com Zsh e Windows com PowerShell dentro do Windows Terminal.
-- Fonte recomendada: Space Mono Nerd Font.
+- Fonte recomendada: Space Mono Nerd Font. O macOS pode instalá-la pelo cask estável; no Windows, instalação e seleção permanecem manuais porque nenhum ID WinGet estável foi adotado.
 - Paleta: fundo `#080808`, superfície `#181818`, laranja `#F24A00`, azul `#00AEEF`, verde `#00F5A0`, texto `#F7F2E8`, secundário `#A1A1AA`.
 - Nenhum token, senha, chave, e-mail privado, telefone, hostname, histórico ou caminho absoluto pessoal pode entrar no repositório.
 - Instaladores devem ser idempotentes, criar backup antes de alterações e gerenciar somente blocos delimitados.
@@ -111,11 +111,11 @@ Definir `DEV_MITOLENDA_TERMINAL_VERSION="1.0.0"` e `mt()` com os cinco subcomand
 
 - [ ] **Step 4: Implementar `install.sh`**
 
-Usar `set -euo pipefail`; calcular a raiz por `SCRIPT_DIR`; usar `${MITOLENDA_TEST_HOME:-$HOME}` como home efetivo; recusar sistemas não Darwin somente quando `MITOLENDA_SKIP_PLATFORM_CHECK` não for `1`; pular instalações quando `MITOLENDA_SKIP_PACKAGES=1`; criar backup datado; copiar arquivos; remover bloco anterior com `awk`; acrescentar exatamente um bloco; validar Starship quando o binário existir.
+Usar `set -euo pipefail`; calcular a raiz por `SCRIPT_DIR`; usar `${MITOLENDA_TEST_HOME:-$HOME}` como home efetivo; recusar sistemas não Darwin somente quando `MITOLENDA_SKIP_PLATFORM_CHECK` não for `1`; pular instalações quando `MITOLENDA_SKIP_PACKAGES=1`; validar Starship antes das mutações; criar backup datado; copiar arquivos; remover bloco anterior com `awk`; acrescentar exatamente um bloco. Um `.zshrc` que seja link simbólico válido deve continuar sendo link e ter seu alvo regular editado; links quebrados ou não regulares devem ser recusados claramente.
 
 - [ ] **Step 5: Implementar `uninstall.sh`**
 
-Remover somente o bloco delimitado do `.zshrc` e o diretório gerenciado. Preservar backups, Starship, fonte e qualquer `starship.toml` que não tenha o cabeçalho `DEV_MITOLENDA // TERMINAL`.
+Remover somente o bloco delimitado do `.zshrc`. Verificar `starship.toml` e `mitolenda.zsh` individualmente contra os arquivos distribuídos, apagar apenas cópias inalteradas e executar `rmdir` somente quando o diretório ficar vazio. Preservar arquivos modificados, desconhecidos ou não relacionados, além de backups, Starship e fonte.
 
 - [ ] **Step 6: Executar testes e análise sintática**
 
@@ -158,7 +158,7 @@ Definir `$Global:DevMitolendaTerminalVersion = '1.0.0'` e `function global:mt { 
 
 - [ ] **Step 4: Implementar `install.ps1`**
 
-Usar `$ErrorActionPreference = 'Stop'`; resolver a raiz por `$PSScriptRoot`; usar `$env:MITOLENDA_TEST_HOME` quando definido; instalar dependências via `winget` somente fora do modo de teste; criar backup; copiar configuração; remover bloco anterior por regex de linha única; acrescentar um bloco que inicializa Starship e importa `mitolenda.ps1`.
+Usar `$ErrorActionPreference = 'Stop'`; resolver a raiz por `$PSScriptRoot`; usar `$env:MITOLENDA_TEST_HOME` quando definido; instalar apenas Starship via `winget` fora do modo de teste; manter a fonte manual no Windows; criar backup; detectar Windows Terminal sem ler ou alterar JSON; validar Starship antes das mutações; copiar os artefatos para uma área temporária e validar o helper com `Get-Command mt` e `mt version` em outro processo PowerShell; só então copiar a configuração final, remover o bloco anterior e acrescentar um bloco que inicializa Starship e importa `mitolenda.ps1`.
 
 - [ ] **Step 5: Implementar `uninstall.ps1`**
 
@@ -170,7 +170,7 @@ Run when available: `pwsh -NoProfile -Command '$ErrorActionPreference="Stop"; [s
 
 Run when available: `pwsh -NoProfile -File tests/Test-InstallWindows.ps1`
 
-Expected: PASS. Sem `pwsh`, a limitação deve ser registrada no README e no handoff.
+Expected: PASS, incluindo falha forçada do Starship antes de qualquer mutação, validação isolada do helper copiado e preservação do JSON sentinela do Windows Terminal. Sem `pwsh`, a limitação deve ser registrada no README e no handoff.
 
 - [ ] **Step 7: Commit**
 

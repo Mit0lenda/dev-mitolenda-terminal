@@ -146,6 +146,74 @@ function Assert-ThrowsWithoutChangingProfile {
     Should -Condition (Test-Path -LiteralPath (Join-Path $caseConfig 'starship.toml')) -Message "uninstall preserves files after malformed $Name markers"
 }
 
+function Assert-StarshipPrevalidationPreservesFiles {
+    $caseHome = Join-Path $testRoot 'starship-prevalidation-failure'
+    $caseProfile = Get-TestProfilePath $caseHome
+    $caseConfig = Join-Path $caseHome '.config/dev-mitolenda-terminal'
+    $profileContent = "# STARSHIP FAILURE SENTINEL`r`n`$Global:ExistingSetting = 1`r`n"
+    Write-Utf8File -Path $caseProfile -Content $profileContent
+    Write-Utf8File -Path (Join-Path $caseConfig 'starship.toml') -Content 'existing config must survive'
+    Write-Utf8File -Path (Join-Path $caseConfig 'mitolenda.ps1') -Content 'existing helper must survive'
+    $originalProfile = Get-BytesBase64 $caseProfile
+    $originalConfig = Get-BytesBase64 (Join-Path $caseConfig 'starship.toml')
+    $originalHelper = Get-BytesBase64 (Join-Path $caseConfig 'mitolenda.ps1')
+
+    $env:MITOLENDA_TEST_HOME = $caseHome
+    function global:starship { throw 'forced Starship validation failure' }
+    try {
+        $installThrew = $false
+        try {
+            & $installScript
+        }
+        catch {
+            $installThrew = $true
+            Should -Condition ($_.Exception.Message -match 'before changing the profile or managed configuration') -Message 'Starship failure is reported as pre-mutation validation'
+        }
+        Should -Condition $installThrew -Message 'installer stops when Starship rejects the source configuration'
+    }
+    finally {
+        Remove-Item Function:\starship -ErrorAction SilentlyContinue
+    }
+
+    Should -Condition ((Get-BytesBase64 $caseProfile) -ceq $originalProfile) -Message 'Starship prevalidation failure preserves the profile'
+    Should -Condition ((Get-BytesBase64 (Join-Path $caseConfig 'starship.toml')) -ceq $originalConfig) -Message 'Starship prevalidation failure preserves the managed configuration'
+    Should -Condition ((Get-BytesBase64 (Join-Path $caseConfig 'mitolenda.ps1')) -ceq $originalHelper) -Message 'Starship prevalidation failure preserves the managed helper'
+}
+
+function Assert-CopiedHelperUsesIsolatedValidation {
+    $fixtureRoot = Join-Path $testRoot 'isolated-helper-fixture'
+    $caseHome = Join-Path $testRoot 'isolated-helper-home'
+    $caseProfile = Get-TestProfilePath $caseHome
+    New-Item -ItemType Directory -Path (Join-Path $fixtureRoot 'config') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $fixtureRoot 'shell') -Force | Out-Null
+    Copy-Item -LiteralPath $installScript -Destination (Join-Path $fixtureRoot 'install.ps1')
+    Copy-Item -LiteralPath (Join-Path $repoRoot 'config/starship.toml') -Destination (Join-Path $fixtureRoot 'config/starship.toml')
+    $fixtureHelper = @'
+# DEV_MITOLENDA // Terminal helpers for PowerShell
+if (Get-Command Should -ErrorAction SilentlyContinue) {
+    function global:mt { 'DEV_MITOLENDA Terminal 1.0.0' }
+}
+else {
+    function global:mt { 'wrong isolated version' }
+}
+'@
+    Write-Utf8File -Path (Join-Path $fixtureRoot 'shell/mitolenda.ps1') -Content $fixtureHelper
+    Write-Utf8File -Path $caseProfile -Content "# ISOLATION SENTINEL`r`n"
+    $originalProfile = Get-BytesBase64 $caseProfile
+    $env:MITOLENDA_TEST_HOME = $caseHome
+
+    $installThrew = $false
+    try {
+        & (Join-Path $fixtureRoot 'install.ps1')
+    }
+    catch {
+        $installThrew = $true
+        Should -Condition ($_.Exception.Message -match 'isolated PowerShell process') -Message 'installer reports isolated helper validation failure'
+    }
+    Should -Condition $installThrew -Message 'installer rejects a copied helper that only passes in the parent process'
+    Should -Condition ((Get-BytesBase64 $caseProfile) -ceq $originalProfile) -Message 'isolated helper validation runs before the profile is changed'
+}
+
 try {
     New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
     $env:MITOLENDA_TEST_HOME = $testRoot
@@ -160,7 +228,7 @@ try {
     Write-Utf8File -Path $terminalSettings -Content '{"sentinel":"do-not-change"}'
     $terminalSettingsBefore = [System.IO.File]::ReadAllText($terminalSettings)
 
-    & $installScript
+    $firstInstallOutput = (& $installScript) -join "`n"
     $profileAfterFirstInstall = [System.IO.File]::ReadAllText($profilePath)
     & $installScript
     $profileAfterSecondInstall = [System.IO.File]::ReadAllText($profilePath)
@@ -174,6 +242,7 @@ try {
     Should -Condition ([System.IO.File]::ReadAllText((Join-Path $configDir 'starship.toml')) -ceq [System.IO.File]::ReadAllText((Join-Path $repoRoot 'config/starship.toml'))) -Message 'installer copies the shared Starship configuration without changing it'
     Should -Condition ([System.IO.File]::ReadAllText((Join-Path $configDir 'mitolenda.ps1')) -ceq [System.IO.File]::ReadAllText((Join-Path $repoRoot 'shell/mitolenda.ps1'))) -Message 'installer copies the PowerShell helpers without changing them'
     Should -Condition (@(Get-ChildItem -LiteralPath $backupRoot -Recurse -File | Where-Object { $_.Name -eq 'Microsoft.PowerShell_profile.ps1' }).Count -ge 1) -Message 'installer backs up the existing PowerShell profile'
+    Should -Condition ($firstInstallOutput -match 'Windows Terminal detected') -Message 'installer reports Windows Terminal detection'
     Should -Condition ([System.IO.File]::ReadAllText($terminalSettings) -ceq $terminalSettingsBefore) -Message 'installer does not edit Windows Terminal JSON'
 
     . (Join-Path $configDir 'mitolenda.ps1')
@@ -252,6 +321,9 @@ try {
     Write-Utf8File -Path (Join-Path $configDir 'starship.toml') -Content '# personal Starship configuration'
     & $uninstallScript
     Should -Condition (Test-Path -LiteralPath (Join-Path $configDir 'starship.toml')) -Message 'uninstall preserves an unrecognized configuration'
+
+    Assert-StarshipPrevalidationPreservesFiles
+    Assert-CopiedHelperUsesIsolatedValidation
 
     $originalCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture
     try {

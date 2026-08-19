@@ -146,6 +146,81 @@ function Install-Dependencies {
     Write-Output 'Install Space Mono Nerd Font from https://www.nerdfonts.com/font-downloads if it is not already installed.'
 }
 
+function Assert-StarshipConfigBeforeMutation {
+    $starshipCommand = Get-Command starship -ErrorAction SilentlyContinue
+    if (-not $starshipCommand) {
+        return
+    }
+
+    $previousStarshipConfig = $env:STARSHIP_CONFIG
+    try {
+        $env:STARSHIP_CONFIG = Join-Path $projectRoot 'config/starship.toml'
+        & starship prompt | Out-Null
+        if ($starshipCommand.CommandType -eq 'Application' -and $LASTEXITCODE -ne 0) {
+            throw "Starship exited with status $LASTEXITCODE."
+        }
+    }
+    catch {
+        throw "DEV_MITOLENDA installer: Starship validation failed before changing the profile or managed configuration. $($_.Exception.Message)"
+    }
+    finally {
+        $env:STARSHIP_CONFIG = $previousStarshipConfig
+    }
+}
+
+function Assert-CopiedHelperInIsolatedPowerShell {
+    param([string]$HelperPath)
+
+    $hostExecutable = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    if ([string]::IsNullOrWhiteSpace($hostExecutable) -or -not (Test-Path -LiteralPath $hostExecutable -PathType Leaf)) {
+        throw 'DEV_MITOLENDA installer: could not locate the current PowerShell executable for isolated helper validation.'
+    }
+
+    $validationScript = Join-Path ([System.IO.Path]::GetTempPath()) ("dev-mitolenda-helper-{0}.ps1" -f [guid]::NewGuid())
+    $validationSource = @'
+param([Parameter(Mandatory = $true)][string]$HelperPath)
+$ErrorActionPreference = 'Stop'
+. $HelperPath
+Get-Command mt -CommandType Function -ErrorAction Stop | Out-Null
+$versionOutput = (mt version) -join "`n"
+if ($versionOutput -cne 'DEV_MITOLENDA Terminal 1.0.0') {
+    throw "Unexpected mt version output: $versionOutput"
+}
+'@
+
+    try {
+        [System.IO.File]::WriteAllText($validationScript, $validationSource, (New-Object System.Text.UTF8Encoding($true)))
+        & $hostExecutable -NoLogo -NoProfile -NonInteractive -File $validationScript -HelperPath $HelperPath
+        $validationStatus = $LASTEXITCODE
+        if ($validationStatus -ne 0) {
+            throw "DEV_MITOLENDA installer: copied mt helper failed validation in an isolated PowerShell process (exit $validationStatus) before changing the profile or managed configuration."
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $validationScript -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-WindowsTerminalAvailable {
+    if ((Get-Command wt.exe -ErrorAction SilentlyContinue) -or (Get-Command wt -ErrorAction SilentlyContinue)) {
+        return $true
+    }
+
+    $packageRoot = if ($isTestMode) {
+        Join-Path $effectiveHome 'AppData/Local/Packages'
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        Join-Path $env:LOCALAPPDATA 'Packages'
+    }
+    else {
+        $null
+    }
+    if ($packageRoot -and (Test-Path -LiteralPath $packageRoot -PathType Container)) {
+        return @(Get-ChildItem -LiteralPath $packageRoot -Directory -Filter 'Microsoft.WindowsTerminal_*' -ErrorAction SilentlyContinue).Count -gt 0
+    }
+    return $false
+}
+
 $profileState = Get-ProfileFileState -Path $profilePath
 $profileContent = $profileState.Content
 Assert-ManagedBlockStructure -Content $profileContent -Path $profilePath
@@ -169,10 +244,22 @@ if (Test-Path -LiteralPath $configDir -PathType Container) {
 }
 
 Install-Dependencies
+Assert-StarshipConfigBeforeMutation
 
-New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $projectRoot 'config/starship.toml') -Destination (Join-Path $configDir 'starship.toml') -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot 'shell/mitolenda.ps1') -Destination (Join-Path $configDir 'mitolenda.ps1') -Force
+$stagingDir = Join-Path ([System.IO.Path]::GetTempPath()) ("dev-mitolenda-install-{0}" -f [guid]::NewGuid())
+try {
+    New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'config/starship.toml') -Destination (Join-Path $stagingDir 'starship.toml')
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'shell/mitolenda.ps1') -Destination (Join-Path $stagingDir 'mitolenda.ps1')
+    Assert-CopiedHelperInIsolatedPowerShell -HelperPath (Join-Path $stagingDir 'mitolenda.ps1')
+
+    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $stagingDir 'starship.toml') -Destination (Join-Path $configDir 'starship.toml') -Force
+    Copy-Item -LiteralPath (Join-Path $stagingDir 'mitolenda.ps1') -Destination (Join-Path $configDir 'mitolenda.ps1') -Force
+}
+finally {
+    Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 $profileParent = Split-Path -Parent $profilePath
 New-Item -ItemType Directory -Path $profileParent -Force | Out-Null
@@ -193,21 +280,11 @@ if ($updatedProfile -cne $profileContent) {
     Write-ProfileFile -Path $profilePath -Content $updatedProfile -FileState $profileState
 }
 
-if (Get-Command starship -ErrorAction SilentlyContinue) {
-    $previousStarshipConfig = $env:STARSHIP_CONFIG
-    try {
-        $env:STARSHIP_CONFIG = Join-Path $configDir 'starship.toml'
-        & starship prompt | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "Starship validation failed with exit $LASTEXITCODE."
-        }
-    }
-    catch {
-        throw "DEV_MITOLENDA installer: $($_.Exception.Message) Backup: $backupDir"
-    }
-    finally {
-        $env:STARSHIP_CONFIG = $previousStarshipConfig
-    }
+if (Test-WindowsTerminalAvailable) {
+    Write-Output 'Windows Terminal detected. Its configuration was not changed.'
+}
+else {
+    Write-Warning 'Windows Terminal was not detected. Its configuration was not changed.'
 }
 
 Write-Output "DEV_MITOLENDA Terminal installed. Backup: $backupDir"

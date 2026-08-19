@@ -80,6 +80,8 @@ O prompt pode exibir usuário e hostname durante uma sessão SSH, mas esses valo
 
 // conteúdo fora do bloco gerenciado no `.zshrc` ou `$PROFILE`;
 
+// o próprio link simbólico quando `~/.zshrc` aponta para um arquivo regular válido;
+
 // permissões do `.zshrc` durante a substituição do bloco;
 
 // codificação e BOM de um perfil PowerShell existente;
@@ -94,11 +96,11 @@ O Windows cria novos perfis com UTF-8 e BOM para compatibilidade com Windows Pow
 
 ## 06 // DESINSTALAÇÃO E LIMITE DO DIRETÓRIO GERENCIADO
 
-No macOS, `uninstall.sh` remove o bloco do `.zshrc`. Se o `starship.toml` tiver a assinatura esperada na primeira linha, o script remove **todo** o diretório `~/.config/dev-mitolenda-terminal/`.
+No macOS, `uninstall.sh` remove o bloco do `.zshrc` sem substituir um link simbólico válido. Depois, compara `starship.toml` e `mitolenda.zsh` individualmente com os arquivos do clone usado para desinstalar. Somente cópias inalteradas são apagadas; arquivos modificados ou desconhecidos permanecem, e o diretório é removido apenas se ficar vazio.
 
 No Windows, `uninstall.ps1` remove o bloco do `$PROFILE`, apaga individualmente o `starship.toml` e o `mitolenda.ps1` somente quando cada assinatura corresponde e remove a pasta apenas se ela ficar vazia.
 
-Não guarde arquivos pessoais no diretório gerenciado. Se você mudar as linhas de assinatura, o desinstalador pode preservar os arquivos por não reconhecê-los.
+Não guarde arquivos pessoais no diretório gerenciado. As proteções são conservadoras, mas esse caminho continua reservado ao projeto.
 
 Nenhum desinstalador restaura backups automaticamente. Nenhum deles desinstala Starship ou a fonte.
 
