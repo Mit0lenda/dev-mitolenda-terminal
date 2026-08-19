@@ -239,7 +239,7 @@ git commit -m "docs: add Mitolenda guides and video scripts"
 
 - [ ] **Step 1: Criar a auditoria de segurança**
 
-O teste deve obter arquivos com `git ls-files -co --exclude-standard` e falhar ao encontrar caminhos pessoais absolutos, cabeçalhos de chaves privadas, prefixos comuns de credenciais, referências a arquivos locais de ambiente ou o e-mail configurado no Git. As expressões da própria auditoria devem ser codificadas para não se autodetectarem.
+O teste deve auditar os blobs exatos do índice, cada árvore alcançável por `HEAD` e, separadamente, os candidatos retornados por `git ls-files -o --exclude-standard`. Isso inclui blobs de symlinks e deve falhar de forma fechada quando um objeto Git não puder ser lido. Além de senhas, cookies, e-mails privados, telefones, identidade local, caminhos pessoais, arquivos de ambiente, dumps de shell/Git e backups, a regressão deve rejeitar as seguintes assinaturas exatas, documentadas aqui em Base64 UTF-8 para evitar autodetecção: `L1VzZXJzLw==`, `QzpcVXNlcnNc`, `QkVHSU4gLi4uIFBSSVZBVEUgS0VZ`, `c2st`, `Z2hwXw==`, `Z2l0aHViX3BhdF8=`, `QUtJQQ==`, `eG94W2JhcHJzXS0=` e `LmVudi5sb2NhbA==`, além do e-mail configurado no Git. Somente versões históricas deste caminho de plano podem ignorar essas assinaturas documentais literais; todas as demais regras de privacidade continuam obrigatórias. `Mit0lenda`, `Nicollas Freitas` e `https://mitolenda.dev/` são as únicas identidades deliberadamente públicas.
 
 - [ ] **Step 2: Executar toda a suíte**
 
