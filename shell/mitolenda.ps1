@@ -15,6 +15,7 @@ function global:mt {
 
     switch ($Command.ToLowerInvariant()) {
         'help' {
+            $Global:LASTEXITCODE = 0
             @'
 DEV_MITOLENDA // Terminal
 
@@ -50,33 +51,38 @@ Usage: mt <command>
             }
 
             if (Get-Command Get-Job -ErrorAction SilentlyContinue) {
-                Write-Output "JOBS: $(@(Get-Job -ErrorAction SilentlyContinue).Count)"
+                Write-Output "JOBS: $(@(Get-Job -ErrorAction SilentlyContinue).Count) total"
             }
             else {
                 Write-Output 'JOBS: unavailable'
             }
+            $Global:LASTEXITCODE = 0
         }
         'git' {
             if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
                 Write-Error 'Git is not installed. Install Git to use mt git.' -ErrorAction Continue
+                $Global:LASTEXITCODE = 1
                 return
             }
 
             & git rev-parse --is-inside-work-tree 2>$null | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 Write-Error 'Not a Git repository. Run mt git inside a project repository.' -ErrorAction Continue
+                $Global:LASTEXITCODE = 1
                 return
             }
 
             $branch = (& git branch --show-current 2>$null | Select-Object -First 1)
             if ($LASTEXITCODE -ne 0) {
                 Write-Error 'Git could not determine the current branch.' -ErrorAction Continue
+                $Global:LASTEXITCODE = 1
                 return
             }
 
             $changes = @(& git status --porcelain 2>$null)
             if ($LASTEXITCODE -ne 0) {
                 Write-Error 'Git could not read the working-tree status.' -ErrorAction Continue
+                $Global:LASTEXITCODE = 1
                 return
             }
 
@@ -93,6 +99,7 @@ Usage: mt <command>
                 Write-Output 'CHANGES:'
                 $changes | ForEach-Object { Write-Output "  $_" }
             }
+            $Global:LASTEXITCODE = 0
         }
         'doctor' {
             $missing = 0
@@ -110,7 +117,7 @@ Usage: mt <command>
             }
 
             if (Get-Command Get-Job -ErrorAction SilentlyContinue) {
-                Write-Output "JOBS: ok ($(@(Get-Job -ErrorAction SilentlyContinue).Count) active)"
+                Write-Output "JOBS: ok ($(@(Get-Job -ErrorAction SilentlyContinue).Count) total)"
             }
             else {
                 Write-Output 'JOBS: unavailable'
@@ -129,6 +136,7 @@ Usage: mt <command>
             $Global:LASTEXITCODE = $missing
         }
         'version' {
+            $Global:LASTEXITCODE = 0
             Write-Output "DEV_MITOLENDA Terminal $Global:DevMitolendaTerminalVersion"
         }
         default {

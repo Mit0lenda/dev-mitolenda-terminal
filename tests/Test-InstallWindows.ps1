@@ -40,6 +40,71 @@ function Get-TestProfilePath {
     Join-Path $TestHome 'Documents/PowerShell/Microsoft.PowerShell_profile.ps1'
 }
 
+function Get-BytesBase64 {
+    param([string]$Path)
+
+    [Convert]::ToBase64String([System.IO.File]::ReadAllBytes($Path))
+}
+
+function Write-EncodedFile {
+    param(
+        [string]$Path,
+        [string]$Content,
+        [System.Text.Encoding]$Encoding,
+        [bool]$EmitPreamble
+    )
+
+    $parent = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $preamble = if ($EmitPreamble) { $Encoding.GetPreamble() } else { [byte[]]@() }
+    $contentBytes = $Encoding.GetBytes($Content)
+    $bytes = New-Object byte[] ($preamble.Length + $contentBytes.Length)
+    [Array]::Copy($preamble, 0, $bytes, 0, $preamble.Length)
+    [Array]::Copy($contentBytes, 0, $bytes, $preamble.Length, $contentBytes.Length)
+    [System.IO.File]::WriteAllBytes($Path, $bytes)
+}
+
+function Assert-ProfileEncodingRoundTrip {
+    param(
+        [string]$Name,
+        [System.Text.Encoding]$Encoding,
+        [bool]$EmitPreamble
+    )
+
+    $caseHome = Join-Path $testRoot "encoding-$Name"
+    $caseProfile = Get-TestProfilePath $caseHome
+    $caseBackupRoot = Join-Path $caseHome '.config/dev-mitolenda-terminal-backups'
+    $caseContent = "# SENTINEL café $Name`r`n`$Global:EncodingSetting = 'ação'`r`n"
+    Write-EncodedFile -Path $caseProfile -Content $caseContent -Encoding $Encoding -EmitPreamble $EmitPreamble
+    $originalBytes = Get-BytesBase64 $caseProfile
+    $expectedPreamble = if ($EmitPreamble) { $Encoding.GetPreamble() } else { [byte[]]@() }
+
+    $env:MITOLENDA_TEST_HOME = $caseHome
+    & $installScript
+    $firstInstallBytes = Get-BytesBase64 $caseProfile
+    & $installScript
+    Should -Condition ((Get-BytesBase64 $caseProfile) -ceq $firstInstallBytes) -Message "repeated install preserves $Name bytes"
+
+    $installedBytes = [System.IO.File]::ReadAllBytes($caseProfile)
+    if ($expectedPreamble.Length -gt 0) {
+        $actualPreamble = New-Object byte[] $expectedPreamble.Length
+        [Array]::Copy($installedBytes, 0, $actualPreamble, 0, $actualPreamble.Length)
+        Should -Condition ([Convert]::ToBase64String($actualPreamble) -ceq [Convert]::ToBase64String($expectedPreamble)) -Message "installer preserves $Name BOM"
+    }
+    $installedText = $Encoding.GetString($installedBytes, $expectedPreamble.Length, $installedBytes.Length - $expectedPreamble.Length)
+    Should -Condition $installedText.Contains("# SENTINEL café $Name") -Message "installer preserves $Name profile text"
+
+    $backupProfiles = @(Get-ChildItem -LiteralPath $caseBackupRoot -Recurse -File | Where-Object { $_.Name -eq 'Microsoft.PowerShell_profile.ps1' })
+    Should -Condition ($backupProfiles.Count -ge 1) -Message "installer creates a backup for $Name profile"
+    $matchingBackups = @($backupProfiles | Where-Object { (Get-BytesBase64 $_.FullName) -ceq $originalBytes })
+    Should -Condition ($matchingBackups.Count -ge 1) -Message "backup preserves original $Name bytes"
+
+    & $uninstallScript
+    Should -Condition ((Get-BytesBase64 $caseProfile) -ceq $originalBytes) -Message "uninstall restores exact $Name bytes"
+}
+
 function Assert-ThrowsWithoutChangingProfile {
     param(
         [string]$Name,
@@ -116,6 +181,59 @@ try {
     Should -Condition (((mt help) -join "`n") -match 'doctor\s+Check optional tools') -Message 'mt help lists the doctor command'
     Should -Condition (((mt status) -join "`n") -match 'PROMPT: configured') -Message 'mt status finds the copied prompt configuration'
 
+    $savedPath = $env:PATH
+    try {
+        $env:PATH = ''
+        $missingDoctorOutput = (mt doctor) -join "`n"
+        Should -Condition ($missingDoctorOutput -match 'STARSHIP: missing') -Message 'mt doctor reports missing Starship'
+        Should -Condition ($missingDoctorOutput -match 'GIT: missing') -Message 'mt doctor reports missing Git'
+        Should -Condition ($Global:LASTEXITCODE -eq 2) -Message 'mt doctor reports two missing tools through LASTEXITCODE'
+        $missingGitOutput = (& { mt git } 2>&1) -join "`n"
+        Should -Condition ($missingGitOutput -match 'Git is not installed') -Message 'mt git reports a missing Git command'
+        Should -Condition ($Global:LASTEXITCODE -eq 1) -Message 'mt git sets LASTEXITCODE when Git is missing'
+    }
+    finally {
+        $env:PATH = $savedPath
+    }
+
+    function global:starship { Write-Output 'starship 1.0.0' }
+    try {
+        if (Get-Command git -ErrorAction SilentlyContinue) {
+            $doctorOutput = (mt doctor) -join "`n"
+            Should -Condition ($doctorOutput -match 'CONFIG: ok') -Message 'mt doctor reports installed configuration'
+            Should -Condition ($Global:LASTEXITCODE -eq 0) -Message 'mt doctor clears LASTEXITCODE when checks pass'
+
+            $gitRepo = Join-Path $testRoot 'git-repo'
+            New-Item -ItemType Directory -Path $gitRepo -Force | Out-Null
+            & git -C $gitRepo init --quiet
+            Push-Location $gitRepo
+            try {
+                $gitOutput = (mt git) -join "`n"
+                Should -Condition ($gitOutput -match 'WORKTREE: clean') -Message 'mt git reports a clean repository'
+                Should -Condition ($Global:LASTEXITCODE -eq 0) -Message 'mt git clears LASTEXITCODE after success'
+                Write-Utf8File -Path (Join-Path $gitRepo 'untracked.txt') -Content 'change'
+                $changedGitOutput = (mt git) -join "`n"
+                Should -Condition ($changedGitOutput -match '\?\? untracked\.txt') -Message 'mt git reports porcelain working-tree changes'
+            }
+            finally {
+                Pop-Location
+            }
+
+            Push-Location $testRoot
+            try {
+                $outsideGitOutput = (& { mt git } 2>&1) -join "`n"
+                Should -Condition ($outsideGitOutput -match 'Not a Git repository') -Message 'mt git reports a non-repository directory'
+                Should -Condition ($Global:LASTEXITCODE -eq 1) -Message 'mt git sets LASTEXITCODE outside a repository'
+            }
+            finally {
+                Pop-Location
+            }
+        }
+    }
+    finally {
+        Remove-Item Function:\starship -ErrorAction SilentlyContinue
+    }
+
     & $uninstallScript
     $profileAfterUninstall = [System.IO.File]::ReadAllText($profilePath)
     Should -Condition ($profileAfterUninstall -match '(?m)^# SENTINEL: keep this setting\r?$') -Message 'uninstall preserves existing profile content'
@@ -134,6 +252,26 @@ try {
     Write-Utf8File -Path (Join-Path $configDir 'starship.toml') -Content '# personal Starship configuration'
     & $uninstallScript
     Should -Condition (Test-Path -LiteralPath (Join-Path $configDir 'starship.toml')) -Message 'uninstall preserves an unrecognized configuration'
+
+    $originalCulture = [System.Threading.Thread]::CurrentThread.CurrentCulture
+    try {
+        [System.Threading.Thread]::CurrentThread.CurrentCulture = [System.Globalization.CultureInfo]::GetCultureInfo('en-US')
+        $ansiEncoding = [System.Text.Encoding]::GetEncoding(1252)
+        Assert-ProfileEncodingRoundTrip -Name 'ansi' -Encoding $ansiEncoding -EmitPreamble $false
+    }
+    finally {
+        [System.Threading.Thread]::CurrentThread.CurrentCulture = $originalCulture
+    }
+    Assert-ProfileEncodingRoundTrip -Name 'utf8-bom' -Encoding (New-Object System.Text.UTF8Encoding($true)) -EmitPreamble $true
+    Assert-ProfileEncodingRoundTrip -Name 'utf16-le' -Encoding (New-Object System.Text.UnicodeEncoding($false, $true)) -EmitPreamble $true
+
+    $newProfileHome = Join-Path $testRoot 'new-profile'
+    $newProfilePath = Get-TestProfilePath $newProfileHome
+    $env:MITOLENDA_TEST_HOME = $newProfileHome
+    & $installScript
+    $newProfileBytes = [System.IO.File]::ReadAllBytes($newProfilePath)
+    Should -Condition ($newProfileBytes.Length -ge 3 -and $newProfileBytes[0] -eq 0xEF -and $newProfileBytes[1] -eq 0xBB -and $newProfileBytes[2] -eq 0xBF) -Message 'new profiles use a Windows PowerShell 5.1-safe UTF-8 BOM'
+    & $uninstallScript
 
     $nestedProfile = (@('# SENTINEL BEFORE', $startMarker, 'managed', $startMarker, 'nested', $endMarker, '# SENTINEL AFTER') -join "`r`n") + "`r`n"
     $unmatchedStartProfile = (@('# SENTINEL BEFORE', $startMarker, 'managed', '# SENTINEL AFTER') -join "`r`n") + "`r`n"

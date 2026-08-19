@@ -49,6 +49,73 @@ function Remove-ManagedBlocks {
     [regex]::Replace($Content, $pattern, '')
 }
 
+function Get-ProfileFileState {
+    param([string]$Path)
+
+    [byte[]]$bytes = [System.IO.File]::ReadAllBytes($Path)
+    $encoding = $null
+    $preambleLength = 0
+    $emitPreamble = $false
+
+    if ($bytes.Length -ge 4 -and $bytes[0] -eq 0x00 -and $bytes[1] -eq 0x00 -and $bytes[2] -eq 0xFE -and $bytes[3] -eq 0xFF) {
+        $encoding = New-Object System.Text.UTF32Encoding($true, $true)
+        $preambleLength = 4
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 4 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE -and $bytes[2] -eq 0x00 -and $bytes[3] -eq 0x00) {
+        $encoding = New-Object System.Text.UTF32Encoding($false, $true)
+        $preambleLength = 4
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $encoding = New-Object System.Text.UTF8Encoding($true)
+        $preambleLength = 3
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+        $encoding = New-Object System.Text.UnicodeEncoding($true, $true)
+        $preambleLength = 2
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        $encoding = New-Object System.Text.UnicodeEncoding($false, $true)
+        $preambleLength = 2
+        $emitPreamble = $true
+    }
+    else {
+        try {
+            $strictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+            $strictUtf8.GetString($bytes) | Out-Null
+            $encoding = New-Object System.Text.UTF8Encoding($false)
+        }
+        catch [System.Text.DecoderFallbackException] {
+            $ansiCodePage = [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.ANSICodePage
+            $encoding = [System.Text.Encoding]::GetEncoding($ansiCodePage)
+        }
+    }
+
+    [pscustomobject]@{
+        Content = $encoding.GetString($bytes, $preambleLength, $bytes.Length - $preambleLength)
+        Encoding = $encoding
+        EmitPreamble = $emitPreamble
+    }
+}
+
+function Write-ProfileFile {
+    param(
+        [string]$Path,
+        [string]$Content,
+        [pscustomobject]$FileState
+    )
+
+    [byte[]]$preamble = if ($FileState.EmitPreamble) { $FileState.Encoding.GetPreamble() } else { @() }
+    [byte[]]$contentBytes = $FileState.Encoding.GetBytes($Content)
+    [byte[]]$bytes = New-Object byte[] ($preamble.Length + $contentBytes.Length)
+    [Array]::Copy($preamble, 0, $bytes, 0, $preamble.Length)
+    [Array]::Copy($contentBytes, 0, $bytes, $preamble.Length, $contentBytes.Length)
+    [System.IO.File]::WriteAllBytes($Path, $bytes)
+}
+
 function Test-ManagedFile {
     param(
         [string]$Path,
@@ -68,11 +135,12 @@ function Test-ManagedFile {
 }
 
 if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
-    $profileContent = [System.IO.File]::ReadAllText($profilePath)
+    $profileState = Get-ProfileFileState -Path $profilePath
+    $profileContent = $profileState.Content
     Assert-ManagedBlockStructure -Content $profileContent -Path $profilePath
     $updatedProfile = Remove-ManagedBlocks -Content $profileContent
     if ($updatedProfile -cne $profileContent) {
-        [System.IO.File]::WriteAllText($profilePath, $updatedProfile, (New-Object System.Text.UTF8Encoding($false)))
+        Write-ProfileFile -Path $profilePath -Content $updatedProfile -FileState $profileState
     }
 }
 

@@ -51,13 +51,79 @@ function Remove-ManagedBlocks {
     [regex]::Replace($Content, $pattern, '')
 }
 
-function Write-Utf8File {
+function Get-ProfileFileState {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return [pscustomobject]@{
+            Content = ''
+            Encoding = New-Object System.Text.UTF8Encoding($true)
+            EmitPreamble = $true
+        }
+    }
+
+    [byte[]]$bytes = [System.IO.File]::ReadAllBytes($Path)
+    $encoding = $null
+    $preambleLength = 0
+    $emitPreamble = $false
+
+    if ($bytes.Length -ge 4 -and $bytes[0] -eq 0x00 -and $bytes[1] -eq 0x00 -and $bytes[2] -eq 0xFE -and $bytes[3] -eq 0xFF) {
+        $encoding = New-Object System.Text.UTF32Encoding($true, $true)
+        $preambleLength = 4
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 4 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE -and $bytes[2] -eq 0x00 -and $bytes[3] -eq 0x00) {
+        $encoding = New-Object System.Text.UTF32Encoding($false, $true)
+        $preambleLength = 4
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        $encoding = New-Object System.Text.UTF8Encoding($true)
+        $preambleLength = 3
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) {
+        $encoding = New-Object System.Text.UnicodeEncoding($true, $true)
+        $preambleLength = 2
+        $emitPreamble = $true
+    }
+    elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+        $encoding = New-Object System.Text.UnicodeEncoding($false, $true)
+        $preambleLength = 2
+        $emitPreamble = $true
+    }
+    else {
+        try {
+            $strictUtf8 = New-Object System.Text.UTF8Encoding($false, $true)
+            $strictUtf8.GetString($bytes) | Out-Null
+            $encoding = New-Object System.Text.UTF8Encoding($false)
+        }
+        catch [System.Text.DecoderFallbackException] {
+            $ansiCodePage = [System.Globalization.CultureInfo]::CurrentCulture.TextInfo.ANSICodePage
+            $encoding = [System.Text.Encoding]::GetEncoding($ansiCodePage)
+        }
+    }
+
+    [pscustomobject]@{
+        Content = $encoding.GetString($bytes, $preambleLength, $bytes.Length - $preambleLength)
+        Encoding = $encoding
+        EmitPreamble = $emitPreamble
+    }
+}
+
+function Write-ProfileFile {
     param(
         [string]$Path,
-        [string]$Content
+        [string]$Content,
+        [pscustomobject]$FileState
     )
 
-    [System.IO.File]::WriteAllText($Path, $Content, (New-Object System.Text.UTF8Encoding($false)))
+    [byte[]]$preamble = if ($FileState.EmitPreamble) { $FileState.Encoding.GetPreamble() } else { @() }
+    [byte[]]$contentBytes = $FileState.Encoding.GetBytes($Content)
+    [byte[]]$bytes = New-Object byte[] ($preamble.Length + $contentBytes.Length)
+    [Array]::Copy($preamble, 0, $bytes, 0, $preamble.Length)
+    [Array]::Copy($contentBytes, 0, $bytes, $preamble.Length, $contentBytes.Length)
+    [System.IO.File]::WriteAllBytes($Path, $bytes)
 }
 
 function Install-Dependencies {
@@ -80,14 +146,9 @@ function Install-Dependencies {
     Write-Output 'Install Space Mono Nerd Font from https://www.nerdfonts.com/font-downloads if it is not already installed.'
 }
 
-$profileContent = if (Test-Path -LiteralPath $profilePath -PathType Leaf) {
-    [System.IO.File]::ReadAllText($profilePath)
-}
-else {
-    ''
-}
+$profileState = Get-ProfileFileState -Path $profilePath
+$profileContent = $profileState.Content
 Assert-ManagedBlockStructure -Content $profileContent -Path $profilePath
-Install-Dependencies
 
 $timestamp = Get-Date -Format 'yyyyMMddHHmmssfff'
 $backupDir = Join-Path $backupRoot $timestamp
@@ -106,6 +167,8 @@ if (Test-Path -LiteralPath $configDir -PathType Container) {
     New-Item -ItemType Directory -Path $managedBackup -Force | Out-Null
     Get-ChildItem -LiteralPath $configDir -Force | Copy-Item -Destination $managedBackup -Recurse -Force
 }
+
+Install-Dependencies
 
 New-Item -ItemType Directory -Path $configDir -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'config/starship.toml') -Destination (Join-Path $configDir 'starship.toml') -Force
@@ -127,7 +190,7 @@ $managedBlock = @(
 ) -join $newline
 $updatedProfile = $cleanProfile + $separator + $managedBlock + $newline
 if ($updatedProfile -cne $profileContent) {
-    Write-Utf8File -Path $profilePath -Content $updatedProfile
+    Write-ProfileFile -Path $profilePath -Content $updatedProfile -FileState $profileState
 }
 
 if (Get-Command starship -ErrorAction SilentlyContinue) {
