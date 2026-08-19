@@ -41,6 +41,23 @@ assert_rejected() {
   printf 'PASS fixture: %s\n' "$name"
 }
 
+assert_rejected_without_value() {
+  local name="$1"
+  local expected="$2"
+  local forbidden_value="$3"
+  shift 3
+  local output_file="$test_root/$name.output"
+
+  if "$@" >"$output_file" 2>&1; then
+    fail "$name fixture was accepted"
+  fi
+  grep -Fq -- "$expected" "$output_file" || fail "$name failed for the wrong reason"
+  if grep -Fq -- "$forbidden_value" "$output_file"; then
+    fail "$name leaked the configured private value"
+  fi
+  printf 'PASS fixture: %s\n' "$name"
+}
+
 assert_content_rejected() {
   local name="$1"
   local expected="$2"
@@ -176,6 +193,31 @@ assert_content_rejected \
   'Slack token prefix' \
   'xo''xb-fixture-token'
 
+assert_path_rejected \
+  token-in-filename \
+  'classic GitHub token prefix' \
+  'gh''p_path-secret'
+assert_path_rejected \
+  credential-in-filename \
+  'password or secret assignment' \
+  'pass''word=path-secret'
+assert_path_rejected \
+  cookie-in-filename \
+  'cookie assignment' \
+  'Coo''kie=session-secret'
+assert_path_rejected \
+  email-in-filename \
+  'private email address' \
+  'private.person@exa''mple.test'
+assert_path_rejected \
+  phone-in-filename \
+  'phone number' \
+  '+55119''87654321'
+assert_path_rejected \
+  private-key-in-filename \
+  'private key header' \
+  'BE''GIN RSA PRI''VATE K''EY'
+
 assert_path_rejected env-file 'environment file' '.''env'
 assert_path_rejected env-local-file 'environment file' '.''env.local'
 assert_path_rejected env-production-file 'environment file' '.''env.production'
@@ -210,6 +252,91 @@ git -C "$case_repo" config user.email "$fixture_git_email"
 assert_rejected \
   private-git-metadata \
   'private email address in Git metadata' \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case configured-email-content
+configured_private_email='owner@local''host'
+git -C "$case_repo" config user.email "$configured_private_email"
+printf '%s\n' "$configured_private_email" > "$case_repo/configured-email.txt"
+git -C "$case_repo" add configured-email.txt
+assert_rejected_without_value \
+  configured-email-content \
+  'configured Git email' \
+  "$configured_private_email" \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case configured-email-filename
+configured_private_email='owner@local''host'
+git -C "$case_repo" config user.email "$configured_private_email"
+printf 'safe fixture content\n' > "$case_repo/$configured_private_email"
+git -C "$case_repo" add "$configured_private_email"
+assert_rejected_without_value \
+  configured-email-filename \
+  'configured Git email' \
+  "$configured_private_email" \
+  bash "$case_repo/tests/test-security.sh"
+
+documentation_path='docs/superpowers/plans/2026-08-18-dev-mitolenda-terminal.md'
+
+initialize_case documentation-path-index
+mkdir -p "$(dirname "$case_repo/$documentation_path")"
+printf '%s\n' 'gh''p_index-documentation-secret' > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+assert_rejected \
+  documentation-path-index \
+  'classic GitHub token prefix' \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case documentation-path-untracked
+mkdir -p "$(dirname "$case_repo/$documentation_path")"
+printf '%s\n' 'gh''p_untracked-documentation-secret' > "$case_repo/$documentation_path"
+assert_rejected \
+  documentation-path-untracked \
+  'classic GitHub token prefix' \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case historical-documentation-signature
+mkdir -p "$(dirname "$case_repo/$documentation_path")"
+printf '%s\n' \
+  'O teste deve obter arquivos com `git ls-files -co --exclude-standard`, documentar gh''p_ e terminar com ou o e-mail configurado em `git config user.email`.' \
+  > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'add historical documentation signature'
+printf 'Encoded historical signature documentation\n' > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'encode historical documentation signature'
+bash "$case_repo/tests/test-security.sh" >/dev/null || fail 'historical documentation signature was rejected'
+printf 'PASS fixture: historical-documentation-signature\n'
+
+initialize_case historical-documentation-prefix-only
+mkdir -p "$(dirname "$case_repo/$documentation_path")"
+printf '%s\n' \
+  'O teste deve obter arquivos com `git ls-files -co --exclude-standard` e conter gh''p_ fora do contrato completo.' \
+  > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'add incomplete historical documentation context'
+printf 'Encoded historical signature documentation\n' > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'remove incomplete historical documentation context'
+assert_rejected \
+  historical-documentation-prefix-only \
+  'classic GitHub token prefix' \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case historical-documentation-other-line
+mkdir -p "$(dirname "$case_repo/$documentation_path")"
+printf '%s\n' \
+  'O teste deve obter arquivos com `git ls-files -co --exclude-standard` e documentar assinaturas.' \
+  'gh''p_unrelated-historical-secret' \
+  > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'add unrelated historical secret'
+printf 'Encoded historical signature documentation\n' > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'remove unrelated historical secret'
+assert_rejected \
+  historical-documentation-other-line \
+  'classic GitHub token prefix' \
   bash "$case_repo/tests/test-security.sh"
 
 initialize_case staged-index-blob
