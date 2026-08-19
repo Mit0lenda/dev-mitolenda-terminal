@@ -10,12 +10,34 @@ fail() {
 
 for relative_path in \
   README.md \
+  README.en.md \
+  README.es.md \
   docs/PERSONALIZACAO.md \
   docs/SEGURANCA.md \
   docs/CONTEUDO.md \
   LICENSE; do
   [ -f "$repo_root/$relative_path" ] || fail "missing $relative_path"
 done
+
+for readme in README.md README.en.md README.es.md; do
+  for language_link in \
+    '[Português (Brasil)](README.md)' \
+    '[English](README.en.md)' \
+    '[Español](README.es.md)'; do
+    grep -Fq -- "$language_link" "$repo_root/$readme" || fail "$readme is missing language link: $language_link"
+  done
+
+  grep -Fq -- 'DEV_MITOLENDA // TERMINAL' "$repo_root/$readme" || fail "$readme is missing the branded terminal header"
+  grep -Fq -- '#F24A00' "$repo_root/$readme" || fail "$readme is missing the brand palette"
+  grep -Fq -- 'mt doctor' "$repo_root/$readme" || fail "$readme is missing mt doctor"
+  grep -Fq -- 'Windows PowerShell 5.1' "$repo_root/$readme" || fail "$readme is missing the Windows runtime limitation"
+done
+
+first_language_line="$(grep -m1 -F '[Português (Brasil)](README.md)' "$repo_root/README.md")"
+case "$first_language_line" in
+  *'**[Português (Brasil)](README.md)**'*) ;;
+  *) fail 'README.md must emphasize PT-BR as the primary language' ;;
+esac
 
 for expected in \
   'DEV_MITOLENDA' \

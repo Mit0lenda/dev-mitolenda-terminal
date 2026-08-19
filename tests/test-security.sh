@@ -103,6 +103,9 @@ github_noreply_pattern='^[[:alnum:]._%+-]+@users[.]noreply[.]github[.]com$'
 intended_public_name='Nicollas Freitas'
 intended_public_email='113867356+Mit0lenda@users'
 intended_public_email+='.noreply.github.com'
+github_merge_name='GitHub'
+github_merge_email='noreply@github'
+github_merge_email+='.com'
 local_env_signature='.''env.local'
 documentation_windows_home_signature='C:'"\\\\"'Us''ers'"\\\\"
 documentation_private_key_signature='BE''GIN ... PRI''VATE K''EY'
@@ -284,6 +287,7 @@ scan_commit() {
   local header_line
   local metadata_name
   local metadata_email
+  local metadata_role
 
   if ! git -C "$repo_root" cat-file commit "$commit_id" > "$commit_file"; then
     fatal "unable to read Git commit $commit_id"
@@ -292,13 +296,18 @@ scan_commit() {
   while IFS= read -r header_line && [ -n "$header_line" ]; do
     case "$header_line" in
       author\ *\<*\>*|committer\ *\<*\>*)
+        metadata_role="${header_line%% *}"
         metadata_name="${header_line#* }"
         metadata_name="${metadata_name%% <*}"
         metadata_email="${header_line##*<}"
         metadata_email="${metadata_email%%>*}"
-        if [[ ! $metadata_email =~ $github_noreply_pattern ]]; then
+        if [ "$metadata_name" = "$intended_public_name" ] && [ "$metadata_email" = "$intended_public_email" ]; then
+          :
+        elif [ "$metadata_role" = 'committer' ] && [ "$metadata_name" = "$github_merge_name" ] && [ "$metadata_email" = "$github_merge_email" ]; then
+          :
+        elif [[ ! $metadata_email =~ $github_noreply_pattern ]]; then
           report_match 'private email address in Git metadata' "commit:$commit_id"
-        elif [ "$metadata_name" != "$intended_public_name" ] || [ "$metadata_email" != "$intended_public_email" ]; then
+        else
           report_match 'unexpected public identity in Git metadata' "commit:$commit_id"
         fi
         ;;

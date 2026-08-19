@@ -479,4 +479,15 @@ git -C "$case_repo" commit --quiet -m 'add approved public fixture'
 bash "$case_repo/tests/test-security.sh" >/dev/null || fail 'public identity or encoded signatures were rejected'
 printf 'PASS fixture: intended public identity and encoded signature documentation\n'
 
+initialize_case github-merge-committer
+printf 'safe merge content\n' > "$case_repo/merge.txt"
+git -C "$case_repo" add merge.txt
+github_merge_email='noreply@github'
+github_merge_email+='.com'
+GIT_COMMITTER_NAME='GitHub' \
+GIT_COMMITTER_EMAIL="$github_merge_email" \
+  git -C "$case_repo" commit --quiet -m 'simulate GitHub merge commit'
+bash "$case_repo/tests/test-security.sh" >/dev/null || fail 'public GitHub merge committer was rejected'
+printf 'PASS fixture: public GitHub merge committer\n'
+
 printf 'PASS: security scanner fixture matrix\n'

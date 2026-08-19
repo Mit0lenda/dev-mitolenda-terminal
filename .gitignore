@@ -1,4 +1,5 @@
 .worktrees/
+work/
 .env
 .env.*
 !.env.example

@@ -1,10 +1,33 @@
 # DEV_MITOLENDA // TERMINAL
 
-Seu terminal pode ter a sua cara — e ainda deixar Git, erros, versões e comandos demorados mais fáceis de ler.
+**[Português (Brasil)](README.md)** · [English](README.en.md) · [Español](README.es.md)
+
+```text
+┌─ DEV_MITOLENDA // TERMINAL ───────────────────────────────┐
+│ IDENTIDADE NÃO É ENFEITE. É INFORMAÇÃO COM FUNÇÃO.       │
+└───────────────────────────────────────────────────────────┘
+
+DEV_MITOLENDA //2026
+~/projetos/terminal GIT:main NODE:v22
+→
+```
+
+> Seu terminal pode ter a sua cara — e ainda deixar Git, erros, versões e comandos demorados mais fáceis de ler.
 
 Este projeto leva a identidade DEV_MITOLENDA para um prompt compartilhado entre macOS e Windows. O visual é direto: fundo escuro, cor com função, rótulos curtos e nenhum ícone obrigatório para entender o que está acontecendo.
 
 Conheça o trabalho em [mitolenda.dev](https://mitolenda.dev/).
+
+### // SISTEMA VISUAL
+
+| Token | Cor | Função |
+| --- | --- | --- |
+| `ORANGE` | `#F24A00` | marca, alerta e erro |
+| `BLUE` | `#00AEEF` | Git, SSH e contexto |
+| `GREEN` | `#00F5A0` | sucesso e prompt pronto |
+| `TEXT` | `#F7F2E8` | informação principal |
+| `SECONDARY` | `#A1A1AA` | versões e informação auxiliar |
+| `BACKGROUND` | `#080808` | base do terminal |
 
 ## 01 // O QUE VOCÊ RECEBE
 
