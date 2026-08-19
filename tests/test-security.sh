@@ -100,6 +100,9 @@ shell_artifact_path_pattern='(^|/)(\.zsh_history|\.bash_history|\.fish_history|\
 backup_path_pattern='(^|/)[^/]*[Bb]ackups?[^/]*(/|$)|(^|/)[^/]+\.(bak|backup|old|orig)$|(^|/)[^/]+~$'
 zsh_history_content_pattern='^: [0-9]{9,}:[0-9]+;'
 github_noreply_pattern='^[[:alnum:]._%+-]+@users[.]noreply[.]github[.]com$'
+intended_public_name='Nicollas Freitas'
+intended_public_email='113867356+Mit0lenda@users'
+intended_public_email+='.noreply.github.com'
 local_env_signature='.''env.local'
 documentation_windows_home_signature='C:'"\\\\"'Us''ers'"\\\\"
 documentation_private_key_signature='BE''GIN ... PRI''VATE K''EY'
@@ -279,6 +282,7 @@ scan_commit() {
   local object_id
   local source
   local header_line
+  local metadata_name
   local metadata_email
 
   if ! git -C "$repo_root" cat-file commit "$commit_id" > "$commit_file"; then
@@ -288,10 +292,14 @@ scan_commit() {
   while IFS= read -r header_line && [ -n "$header_line" ]; do
     case "$header_line" in
       author\ *\<*\>*|committer\ *\<*\>*)
+        metadata_name="${header_line#* }"
+        metadata_name="${metadata_name%% <*}"
         metadata_email="${header_line##*<}"
         metadata_email="${metadata_email%%>*}"
         if [[ ! $metadata_email =~ $github_noreply_pattern ]]; then
           report_match 'private email address in Git metadata' "commit:$commit_id"
+        elif [ "$metadata_name" != "$intended_public_name" ] || [ "$metadata_email" != "$intended_public_email" ]; then
+          report_match 'unexpected public identity in Git metadata' "commit:$commit_id"
         fi
         ;;
     esac

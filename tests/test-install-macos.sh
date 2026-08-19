@@ -75,6 +75,57 @@ printf '%s\n' '# personal Starship configuration' > "$managed_dir/starship.toml"
 MITOLENDA_TEST_HOME="$test_home" bash "$repo_root/uninstall.sh"
 assert_file "$managed_dir/starship.toml"
 
+selective_home="$test_home/selective-uninstall"
+selective_config="$selective_home/.config/dev-mitolenda-terminal"
+mkdir -p "$selective_config"
+cp "$repo_root/config/starship.toml" "$selective_config/starship.toml"
+cp "$repo_root/shell/mitolenda.zsh" "$selective_config/mitolenda.zsh"
+printf '%s\n' '# user customization' >> "$selective_config/mitolenda.zsh"
+printf '%s\n' 'keep this unrelated file' > "$selective_config/notes.txt"
+MITOLENDA_TEST_HOME="$selective_home" bash "$repo_root/uninstall.sh"
+[ ! -e "$selective_config/starship.toml" ] || fail 'expected uninstall to remove the unchanged known Starship configuration'
+assert_file "$selective_config/mitolenda.zsh"
+assert_contains "$selective_config/mitolenda.zsh" '# user customization'
+assert_file "$selective_config/notes.txt"
+[ -d "$selective_config" ] || fail 'expected uninstall to preserve a non-empty managed directory'
+
+symlink_home="$test_home/symlink-profile"
+symlink_target_dir="$symlink_home/profile-files"
+symlink_target="$symlink_target_dir/zshrc"
+symlink_zshrc="$symlink_home/.zshrc"
+mkdir -p "$symlink_target_dir"
+printf '%s\n' '# SYMLINK SENTINEL' 'export SYMLINK_SETTING=1' > "$symlink_target"
+cp "$symlink_target" "$symlink_home/original-target"
+ln -s 'profile-files/zshrc' "$symlink_zshrc"
+MITOLENDA_TEST_HOME="$symlink_home" MITOLENDA_SKIP_PACKAGES=1 bash "$repo_root/install.sh"
+[ -L "$symlink_zshrc" ] || fail 'expected install to preserve the .zshrc symlink'
+[ "$(readlink "$symlink_zshrc")" = 'profile-files/zshrc' ] || fail 'expected install to preserve the .zshrc symlink destination'
+assert_contains "$symlink_target" "$start_marker"
+MITOLENDA_TEST_HOME="$symlink_home" bash "$repo_root/uninstall.sh"
+[ -L "$symlink_zshrc" ] || fail 'expected uninstall to preserve the .zshrc symlink'
+[ "$(readlink "$symlink_zshrc")" = 'profile-files/zshrc' ] || fail 'expected uninstall to preserve the .zshrc symlink destination'
+cmp -s "$symlink_home/original-target" "$symlink_target" || fail 'expected uninstall to remove only the managed block from the symlink target'
+
+failure_home="$test_home/starship-prevalidation-failure"
+failure_config="$failure_home/.config/dev-mitolenda-terminal"
+failure_bin="$failure_home/bin"
+mkdir -p "$failure_config" "$failure_bin"
+printf '%s\n' '# FAILURE SENTINEL' 'export FAILURE_SETTING=1' > "$failure_home/.zshrc"
+printf '%s\n' 'existing config must survive' > "$failure_config/starship.toml"
+printf '%s\n' 'existing helper must survive' > "$failure_config/mitolenda.zsh"
+cp "$failure_home/.zshrc" "$failure_home/original.zshrc"
+cp "$failure_config/starship.toml" "$failure_home/original.starship.toml"
+cp "$failure_config/mitolenda.zsh" "$failure_home/original.mitolenda.zsh"
+printf '%s\n' '#!/usr/bin/env bash' 'exit 23' > "$failure_bin/starship"
+chmod +x "$failure_bin/starship"
+if failure_output="$(PATH="$failure_bin:$PATH" MITOLENDA_TEST_HOME="$failure_home" MITOLENDA_SKIP_PACKAGES=1 bash "$repo_root/install.sh" 2>&1)"; then
+  fail 'expected install to stop when Starship rejects the source configuration'
+fi
+printf '%s\n' "$failure_output" | grep -Fq 'before changing the profile or managed configuration' || fail 'expected a prevalidation failure message'
+cmp -s "$failure_home/original.zshrc" "$failure_home/.zshrc" || fail 'expected Starship prevalidation failure to preserve .zshrc'
+cmp -s "$failure_home/original.starship.toml" "$failure_config/starship.toml" || fail 'expected Starship prevalidation failure to preserve existing configuration'
+cmp -s "$failure_home/original.mitolenda.zsh" "$failure_config/mitolenda.zsh" || fail 'expected Starship prevalidation failure to preserve existing helper'
+
 fake_bin="$package_home/bin"
 brew_log="$package_home/brew.log"
 package_zshrc="$package_home/.zshrc"

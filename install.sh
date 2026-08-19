@@ -28,6 +28,18 @@ install_packages() {
   fi
 }
 
+validate_starship_config() {
+  local validation_status
+
+  command -v starship >/dev/null 2>&1 || return 0
+  if STARSHIP_CONFIG="$SCRIPT_DIR/config/starship.toml" starship prompt >/dev/null; then
+    return 0
+  else
+    validation_status=$?
+  fi
+  die "Starship validation failed with exit $validation_status before changing the profile or managed configuration."
+}
+
 if [ "${MITOLENDA_SKIP_PLATFORM_CHECK:-0}" != "1" ] && [ "$(uname -s)" != 'Darwin' ]; then
   die 'This installer supports macOS with Zsh. Use the Windows installer on Windows.'
 fi
@@ -35,6 +47,7 @@ fi
 command -v zsh >/dev/null 2>&1 || die 'Zsh is required but was not found.'
 mitolenda_validate_managed_blocks "$ZSHRC" || die 'Refusing to change .zshrc with invalid managed block markers.'
 install_packages
+validate_starship_config
 
 timestamp="$(date '+%Y%m%d%H%M%S')"
 backup_dir="$BACKUP_ROOT/$timestamp"
@@ -74,10 +87,6 @@ if command -v starship >/dev/null 2>&1; then
 fi
 # <<< DEV_MITOLENDA TERMINAL <<<
 EOF
-
-if command -v starship >/dev/null 2>&1; then
-  STARSHIP_CONFIG="$CONFIG_DIR/starship.toml" starship prompt >/dev/null
-fi
 
 printf 'DEV_MITOLENDA Terminal installed. Backup: %s\n' "$backup_dir"
 printf 'Select Space Mono Nerd Font in your terminal settings, then start a new Zsh session.\n'

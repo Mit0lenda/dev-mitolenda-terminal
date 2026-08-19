@@ -4,7 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scanner="$repo_root/tests/test-security.sh"
 test_root="$(mktemp -d)"
-fixture_git_email='fixture@users''.''noreply.github.com'
+fixture_git_email='113867356+Mit0lenda@users''.''noreply.github.com'
 real_git="$(command -v git)"
 trap 'rm -rf "$test_root"' EXIT
 
@@ -267,6 +267,28 @@ git -C "$case_repo" config user.email "$fixture_git_email"
 assert_rejected \
   private-git-metadata \
   'private email address in Git metadata' \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case unintended-noreply-metadata
+git -C "$case_repo" config user.email 'unintended@users''.''noreply.github.com'
+printf 'safe fixture content\n' > "$case_repo/metadata.txt"
+git -C "$case_repo" add metadata.txt
+git -C "$case_repo" commit --quiet -m 'add unintended noreply metadata fixture'
+git -C "$case_repo" config user.email "$fixture_git_email"
+assert_rejected \
+  unintended-noreply-metadata \
+  'unexpected public identity in Git metadata' \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case unintended-author-name
+git -C "$case_repo" config user.name 'Unintended Local Identity'
+printf 'safe fixture content\n' > "$case_repo/metadata.txt"
+git -C "$case_repo" add metadata.txt
+git -C "$case_repo" commit --quiet -m 'add unintended author name fixture'
+git -C "$case_repo" config user.name 'Nicollas Freitas'
+assert_rejected \
+  unintended-author-name \
+  'unexpected public identity in Git metadata' \
   bash "$case_repo/tests/test-security.sh"
 
 initialize_case configured-email-content
