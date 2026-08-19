@@ -3,7 +3,7 @@
 palette = "mitolenda"
 add_newline = false
 format = """
-$custom.year$custom.ssh
+$time$username$hostname
 $directory$git_branch$git_state$git_status$nodejs$bun$python$package
 $status$cmd_duration$jobs$character"""
 
@@ -14,7 +14,7 @@ orange = "#F24A00"
 blue = "#00AEEF"
 green = "#00F5A0"
 text = "#F7F2E8"
-muted = "#A1A1AA"
+secondary = "#A1A1AA"
 
 [directory]
 style = "bold text"
@@ -41,7 +41,7 @@ format = "[ BUN:$version ](bold green)"
 format = "[ PY:$version ](bold blue)"
 
 [package]
-format = "[ PKG:$version ](bold muted)"
+format = "[ PKG:$version ](bold secondary)"
 
 [status]
 disabled = false
@@ -49,7 +49,7 @@ format = "[ ERR:$status ](bold orange)"
 
 [cmd_duration]
 min_time = 1_000
-format = "[ TIME:$duration ](bold muted)"
+format = "[ TIME:$duration ](bold secondary)"
 
 [jobs]
 format = "[ JOBS:$number ](bold blue)"
@@ -58,13 +58,16 @@ format = "[ JOBS:$number ](bold blue)"
 success_symbol = "[ // ](bold green)"
 error_symbol = "[ // ](bold orange)"
 
-[custom.year]
-command = 'date +%Y'
-when = 'true'
-format = "[ DEV_MITOLENDA //$output ](bold orange)"
+[time]
+disabled = false
+time_format = "%Y"
+format = "[ DEV_MITOLENDA //$time ](bold orange)"
 
-[custom.ssh]
-command = 'printf "%s@%s" "$USER" "$(hostname -s)"'
-when = 'test -n "$SSH_CONNECTION"'
-shell = ["sh"]
-format = "[ SSH:$output](bold blue)"
+[username]
+show_always = false
+format = "[ SSH:$user](bold blue)"
+
+[hostname]
+ssh_only = true
+ssh_symbol = ""
+format = "[@$hostname](bold blue)"

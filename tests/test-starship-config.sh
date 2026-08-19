@@ -12,13 +12,20 @@ fi
 for expected in \
   'palette = "mitolenda"' \
   'DEV_MITOLENDA' \
-  '#F24A00' \
+  'background = "#080808"' \
+  'surface = "#181818"' \
+  'orange = "#F24A00"' \
+  'blue = "#00AEEF"' \
+  'green = "#00F5A0"' \
+  'text = "#F7F2E8"' \
+  'secondary = "#A1A1AA"' \
   '[git_branch]' \
   '[git_status]' \
   '[status]' \
   '[cmd_duration]' \
-  '[custom.year]' \
-  '[custom.ssh]'; do
+  '[time]' \
+  '[username]' \
+  '[hostname]'; do
   grep -F -- "$expected" "$config_file" >/dev/null
 done
 
