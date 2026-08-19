@@ -1,0 +1,70 @@
+# DEV_MITOLENDA // TERMINAL
+
+palette = "mitolenda"
+add_newline = false
+format = """
+$custom.year$custom.ssh
+$directory$git_branch$git_state$git_status$nodejs$bun$python$package
+$status$cmd_duration$jobs$character"""
+
+[palettes.mitolenda]
+background = "#080808"
+surface = "#181818"
+orange = "#F24A00"
+blue = "#00AEEF"
+green = "#00F5A0"
+text = "#F7F2E8"
+muted = "#A1A1AA"
+
+[directory]
+style = "bold text"
+format = "[ $path ]($style)"
+truncation_length = 3
+
+[git_branch]
+symbol = ""
+format = "[ GIT:$symbol$branch ](bold orange)"
+
+[git_state]
+format = "[ $state($progress_current/$progress_total) ](bold orange)"
+
+[git_status]
+format = "[ $all_status$ahead_behind ](bold orange)"
+
+[nodejs]
+format = "[ NODE:$version ](bold green)"
+
+[bun]
+format = "[ BUN:$version ](bold green)"
+
+[python]
+format = "[ PY:$version ](bold blue)"
+
+[package]
+format = "[ PKG:$version ](bold muted)"
+
+[status]
+disabled = false
+format = "[ ERR:$status ](bold orange)"
+
+[cmd_duration]
+min_time = 1_000
+format = "[ TIME:$duration ](bold muted)"
+
+[jobs]
+format = "[ JOBS:$number ](bold blue)"
+
+[character]
+success_symbol = "[ // ](bold green)"
+error_symbol = "[ // ](bold orange)"
+
+[custom.year]
+command = 'date +%Y'
+when = 'true'
+format = "[ DEV_MITOLENDA //$output ](bold orange)"
+
+[custom.ssh]
+command = 'printf "%s@%s" "$USER" "$(hostname -s)"'
+when = 'test -n "$SSH_CONNECTION"'
+shell = ["sh"]
+format = "[ SSH:$output](bold blue)"

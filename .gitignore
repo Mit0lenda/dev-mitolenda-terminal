@@ -1,1 +1,15 @@
 .worktrees/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.log
+backups/
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+*.tmp
