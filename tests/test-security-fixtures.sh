@@ -13,6 +13,21 @@ fail() {
   exit 1
 }
 
+decode_base64() {
+  local encoded="$1"
+  local decoded
+
+  if decoded="$(printf '%s' "$encoded" | base64 --decode 2>/dev/null)"; then
+    printf '%s' "$decoded"
+    return 0
+  fi
+  if decoded="$(printf '%s' "$encoded" | base64 -D 2>/dev/null)"; then
+    printf '%s' "$decoded"
+    return 0
+  fi
+  fail 'base64 decoder unavailable'
+}
+
 initialize_case() {
   local name="$1"
 
@@ -277,6 +292,7 @@ assert_rejected_without_value \
   bash "$case_repo/tests/test-security.sh"
 
 documentation_path='docs/superpowers/plans/2026-08-18-dev-mitolenda-terminal.md'
+historical_contract_line="$(decode_base64 'TyB0ZXN0ZSBkZXZlIG9idGVyIGFycXVpdm9zIGNvbSBgZ2l0IGxzLWZpbGVzIC1jbyAtLWV4Y2x1ZGUtc3RhbmRhcmRgLCBleGNsdWlyIGEgcHLDs3ByaWEgZXhwcmVzc8OjbyBkZSB0ZXN0ZSBxdWFuZG8gbmVjZXNzw6FyaW8gZSBmYWxoYXIgYW8gZW5jb250cmFyIGAvVXNlcnMvYCwgYEM6XFxVc2Vyc1xcYCwgYEJFR0lOIC4uLiBQUklWQVRFIEtFWWAsIGBzay1gLCBgZ2hwX2AsIGBnaXRodWJfcGF0X2AsIGBBS0lBYCwgYHhveFtiYXByc10tYCwgYC5lbnYubG9jYWxgIG91IG8gZS1tYWlsIGNvbmZpZ3VyYWRvIGVtIGBnaXQgY29uZmlnIHVzZXIuZW1haWxgLgo=')"
 
 initialize_case documentation-path-index
 mkdir -p "$(dirname "$case_repo/$documentation_path")"
@@ -297,9 +313,7 @@ assert_rejected \
 
 initialize_case historical-documentation-signature
 mkdir -p "$(dirname "$case_repo/$documentation_path")"
-printf '%s\n' \
-  'O teste deve obter arquivos com `git ls-files -co --exclude-standard`, documentar gh''p_ e terminar com ou o e-mail configurado em `git config user.email`.' \
-  > "$case_repo/$documentation_path"
+printf '%s\n' "$historical_contract_line" > "$case_repo/$documentation_path"
 git -C "$case_repo" add "$documentation_path"
 git -C "$case_repo" commit --quiet -m 'add historical documentation signature'
 printf 'Encoded historical signature documentation\n' > "$case_repo/$documentation_path"
@@ -307,6 +321,35 @@ git -C "$case_repo" add "$documentation_path"
 git -C "$case_repo" commit --quiet -m 'encode historical documentation signature'
 bash "$case_repo/tests/test-security.sh" >/dev/null || fail 'historical documentation signature was rejected'
 printf 'PASS fixture: historical-documentation-signature\n'
+
+initialize_case historical-documentation-appended-secret
+mkdir -p "$(dirname "$case_repo/$documentation_path")"
+appended_secret='gh''p_appended-secret'
+printf '%s\n' "$historical_contract_line $appended_secret" > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'append secret after historical contract'
+printf 'Encoded historical signature documentation\n' > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'remove appended historical secret'
+assert_rejected \
+  historical-documentation-appended-secret \
+  'classic GitHub token prefix' \
+  bash "$case_repo/tests/test-security.sh"
+
+initialize_case historical-documentation-embedded-secret
+mkdir -p "$(dirname "$case_repo/$documentation_path")"
+embedded_secret='gh''p_embedded-secret'
+historical_embedded_line="${historical_contract_line/ e falhar / $embedded_secret e falhar }"
+printf '%s\n' "$historical_embedded_line" > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'embed secret in historical contract'
+printf 'Encoded historical signature documentation\n' > "$case_repo/$documentation_path"
+git -C "$case_repo" add "$documentation_path"
+git -C "$case_repo" commit --quiet -m 'remove embedded historical secret'
+assert_rejected \
+  historical-documentation-embedded-secret \
+  'classic GitHub token prefix' \
+  bash "$case_repo/tests/test-security.sh"
 
 initialize_case historical-documentation-prefix-only
 mkdir -p "$(dirname "$case_repo/$documentation_path")"

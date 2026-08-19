@@ -79,8 +79,6 @@ grep_regex_insensitive() {
 }
 
 signature_documentation_path='docs/superpowers/plans/2026-08-18-dev-mitolenda-terminal.md'
-signature_documentation_prefix='O teste deve obter arquivos com `git ls-files -co --exclude-standard`'
-signature_documentation_suffix='ou o e-mail configurado em `git config user.email`.'
 mac_home_signature='/'"Us"'ers/'
 windows_home_signature='C:'\\'Us'ers'\'
 unix_personal_path_pattern='/('"Users"'|'"home"'|usr/'"home"'|var/'"home"'|'"root"')/[[:alnum:]_.-]+'
@@ -103,6 +101,28 @@ backup_path_pattern='(^|/)[^/]*[Bb]ackups?[^/]*(/|$)|(^|/)[^/]+\.(bak|backup|old
 zsh_history_content_pattern='^: [0-9]{9,}:[0-9]+;'
 github_noreply_pattern='^[[:alnum:]._%+-]+@users[.]noreply[.]github[.]com$'
 local_env_signature='.''env.local'
+documentation_windows_home_signature='C:'"\\\\"'Us''ers'"\\\\"
+documentation_private_key_signature='BE''GIN ... PRI''VATE K''EY'
+documentation_generic_api_key_signature='s''k-'
+signature_documentation_exact_line='O teste deve obter arquivos com `git ls-files -co --exclude-standard`, excluir a própria expressão de teste quando necessário e falhar ao encontrar `'
+signature_documentation_exact_line+="$mac_home_signature"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$documentation_windows_home_signature"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$documentation_private_key_signature"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$documentation_generic_api_key_signature"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$classic_github_token_pattern"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$fine_grained_github_token_pattern"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$aws_access_key_pattern"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$slack_token_pattern"
+signature_documentation_exact_line+='`, `'
+signature_documentation_exact_line+="$local_env_signature"
+signature_documentation_exact_line+='` ou o e-mail configurado em `git config user.email`.'
 
 local_username="${MITOLENDA_SECURITY_USERNAME:-$(id -un 2>/dev/null || true)}"
 local_hostname="${MITOLENDA_SECURITY_HOSTNAME:-$(hostname 2>/dev/null || true)}"
@@ -203,6 +223,18 @@ scan_content() {
   scan_fixed_content 'local environment file reference' "$local_env_signature" "$file" "$source"
 }
 
+filter_historical_signature_documentation() {
+  local line
+
+  : > "$historical_blob_file"
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$line" = "$signature_documentation_exact_line" ]; then
+      continue
+    fi
+    printf '%s\n' "$line" >> "$historical_blob_file" || fatal 'unable to filter historical signature documentation'
+  done < "$blob_file"
+}
+
 read_git_blob() {
   local object_id="$1"
   local source="$2"
@@ -280,9 +312,7 @@ scan_commit() {
     scan_path "$relative_path" "$source"
     read_git_blob "$object_id" "$source"
     if [ "$relative_path" = "$signature_documentation_path" ]; then
-      awk -v prefix="$signature_documentation_prefix" -v suffix="$signature_documentation_suffix" \
-        'index($0, prefix) == 1 && index($0, suffix) > 0 { next } { print }' \
-        "$blob_file" > "$historical_blob_file" || fatal 'unable to filter historical signature documentation'
+      filter_historical_signature_documentation
       scan_content "$historical_blob_file" "$source"
     else
       scan_content "$blob_file" "$source"
