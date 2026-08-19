@@ -5,45 +5,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EFFECTIVE_HOME="${MITOLENDA_TEST_HOME:-$HOME}"
 CONFIG_DIR="$EFFECTIVE_HOME/.config/dev-mitolenda-terminal"
 ZSHRC="$EFFECTIVE_HOME/.zshrc"
-START_MARKER='# >>> DEV_MITOLENDA TERMINAL >>>'
-END_MARKER='# <<< DEV_MITOLENDA TERMINAL <<<'
-
-remove_managed_block() {
-  local target="$1"
-  local temporary
-
-  [ -f "$target" ] || return 0
-  temporary="$(mktemp "${target}.mitolenda.XXXXXX")"
-  cp -p "$target" "$temporary"
-  awk -v start="$START_MARKER" -v end="$END_MARKER" '
-    !inside && $0 == start {
-      inside = 1
-      held = $0 ORS
-      next
-    }
-    inside {
-      held = held $0 ORS
-      if ($0 == end) {
-        inside = 0
-        held = ""
-      }
-      next
-    }
-    { print }
-    END {
-      if (inside) {
-        printf "%s", held
-      }
-    }
-  ' "$target" > "$temporary"
-  mv "$temporary" "$target"
-}
+source "$SCRIPT_DIR/shell/managed-block.sh"
 
 is_managed_config() {
   [ -f "$CONFIG_DIR/starship.toml" ] && head -n 1 "$CONFIG_DIR/starship.toml" | grep -Fqx '# DEV_MITOLENDA // TERMINAL'
 }
 
-remove_managed_block "$ZSHRC"
+if ! mitolenda_remove_managed_blocks "$ZSHRC"; then
+  printf 'DEV_MITOLENDA uninstall: refusing to change .zshrc with invalid managed block markers.\n' >&2
+  exit 1
+fi
 
 if [ -d "$CONFIG_DIR" ]; then
   if is_managed_config; then

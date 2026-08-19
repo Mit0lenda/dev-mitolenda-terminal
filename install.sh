@@ -6,43 +6,11 @@ EFFECTIVE_HOME="${MITOLENDA_TEST_HOME:-$HOME}"
 CONFIG_DIR="$EFFECTIVE_HOME/.config/dev-mitolenda-terminal"
 BACKUP_ROOT="$EFFECTIVE_HOME/.config/dev-mitolenda-terminal-backups"
 ZSHRC="$EFFECTIVE_HOME/.zshrc"
-START_MARKER='# >>> DEV_MITOLENDA TERMINAL >>>'
-END_MARKER='# <<< DEV_MITOLENDA TERMINAL <<<'
+source "$SCRIPT_DIR/shell/managed-block.sh"
 
 die() {
   printf 'DEV_MITOLENDA installer: %s\n' "$*" >&2
   exit 1
-}
-
-remove_managed_block() {
-  local target="$1"
-  local temporary
-
-  [ -f "$target" ] || return 0
-  temporary="$(mktemp "${target}.mitolenda.XXXXXX")"
-  cp -p "$target" "$temporary"
-  awk -v start="$START_MARKER" -v end="$END_MARKER" '
-    !inside && $0 == start {
-      inside = 1
-      held = $0 ORS
-      next
-    }
-    inside {
-      held = held $0 ORS
-      if ($0 == end) {
-        inside = 0
-        held = ""
-      }
-      next
-    }
-    { print }
-    END {
-      if (inside) {
-        printf "%s", held
-      }
-    }
-  ' "$target" > "$temporary"
-  mv "$temporary" "$target"
 }
 
 install_packages() {
@@ -65,6 +33,7 @@ if [ "${MITOLENDA_SKIP_PLATFORM_CHECK:-0}" != "1" ] && [ "$(uname -s)" != 'Darwi
 fi
 
 command -v zsh >/dev/null 2>&1 || die 'Zsh is required but was not found.'
+mitolenda_validate_managed_blocks "$ZSHRC" || die 'Refusing to change .zshrc with invalid managed block markers.'
 install_packages
 
 timestamp="$(date '+%Y%m%d%H%M%S')"
@@ -89,7 +58,7 @@ cp "$SCRIPT_DIR/config/starship.toml" "$CONFIG_DIR/starship.toml"
 cp "$SCRIPT_DIR/shell/mitolenda.zsh" "$CONFIG_DIR/mitolenda.zsh"
 
 touch "$ZSHRC"
-remove_managed_block "$ZSHRC"
+mitolenda_remove_managed_blocks "$ZSHRC" || die 'Refusing to replace an invalid managed block in .zshrc.'
 if [ -s "$ZSHRC" ]; then
   last_byte="$(tail -c 1 "$ZSHRC" | od -An -tx1 | tr -d '[:space:]')"
   if [ "$last_byte" != '0a' ]; then
