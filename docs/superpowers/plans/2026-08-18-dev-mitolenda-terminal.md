@@ -239,7 +239,7 @@ git commit -m "docs: add Mitolenda guides and video scripts"
 
 - [ ] **Step 1: Criar a auditoria de segurança**
 
-O teste deve obter arquivos com `git ls-files -co --exclude-standard`, excluir a própria expressão de teste quando necessário e falhar ao encontrar `/Users/`, `C:\\Users\\`, `BEGIN ... PRIVATE KEY`, `sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox[baprs]-`, `.env.local` ou o e-mail configurado em `git config user.email`.
+O teste deve obter arquivos com `git ls-files -co --exclude-standard` e falhar ao encontrar caminhos pessoais absolutos, cabeçalhos de chaves privadas, prefixos comuns de credenciais, referências a arquivos locais de ambiente ou o e-mail configurado no Git. As expressões da própria auditoria devem ser codificadas para não se autodetectarem.
 
 - [ ] **Step 2: Executar toda a suíte**
 
